@@ -4,9 +4,10 @@ from skimage import measure, morphology, segmentation
 from skimage.morphology import ball, disk, dilation, binary_erosion, remove_small_objects, erosion, closing, reconstruction, binary_closing
 from skimage.measure import label,regionprops, perimeter
 from skimage.morphology import binary_dilation, binary_opening
-from skimage.filters import roberts, sobel
+from skimage.filters import roberts, sobel, threshold_otsu
 from skimage.segmentation import clear_border, mark_boundaries
 import matplotlib.pyplot as plt
+import cv2
 
 def generate_markers(image):
     # Creation of the internal Marker
@@ -130,7 +131,7 @@ def get_filtered_lung(image):
 
     return lungfilter
 
-# 关键方法
+# key solution
 def get_segmented_lungs(raw_im):
     '''
     对肺部CT图像实现实质
@@ -144,6 +145,9 @@ def get_segmented_lungs(raw_im):
     Step 1: Convert into a binary image. 
     '''
     binary = im < -567.5
+    # binary = im < -500
+    # thresh = threshold_otsu(binary)
+    # binary = binary > thresh
     '''
     删除连接到图像边界的噪点。
     Step 2: Remove the blobs connected to the border of the image.
@@ -178,7 +182,7 @@ def get_segmented_lungs(raw_im):
     Step 6: Closure operation with a disk of radius 10. This operation is 
     to keep nodules attached to the lung wall.
     '''
-    selem = disk(10)
+    selem = disk(7)
     binary = binary_closing(binary, selem)
     '''
     将二值图中的部分噪点填充。
@@ -194,4 +198,35 @@ def get_segmented_lungs(raw_im):
     im[get_high_vals] = 0
 
     return binary, im
+
+def get_segmented_lungs_with_opencv_api(raw_im, ground_truth, plot=False):
+    '''
+    对肺部CT图像实现实质
+    This funtion segments the lungs from the given 2D slice.
+    :param raw_im: 输入原始图像
+    :return: binaty 二值图掩码 ，im 原始图像叠加二值图掩码后结果
+    '''
+    im = raw_im.copy()
+    if plot == True:
+        f, plots = plt.subplots(8, 1, figsize=(5, 40))
+    '''
+    将2D Slice转为二值图
+    Step 1: Convert into a binary image. 
+    '''
+    binary = im < -567.5
+    if plot == True:
+        plots[0].axis('off')
+        plots[0].imshow(binary, cmap=plt.cm.bone)
+    ostued = cv2.threshold(binary, thresh=0, maxval=255, type=cv2.THRESH_OTSU)
+    if plot == True:
+        plots[1].axis('off')
+        plots[1].imshow(ostued, cmap=plt.cm.bone)
+    expanded = cv2.copyMakeBorder(binary, 3, 3, 3, 3, cv2.BORDER_CONSTANT, value=0)
+    if plot == True:
+        plots[2].axis('off')
+        plots[2].imshow(expanded, cmap=plt.cm.bone)
+    filled = cv2.floodFill(expanded, mask=ground_truth, seedPoint=(0, 0), newVal=255)
+    if plot == True:
+        plots[3].axis('off')
+        plots[4].imshow(filled, cmap=plt.cm.bone)
 
